@@ -47,6 +47,7 @@
 CLAVVideo::CLAVVideo(LPUNKNOWN pUnk, HRESULT *phr)
     : CTransformFilter(NAME("LAV Video Decoder"), 0, __uuidof(CLAVVideo))
     , m_Decoder(this)
+    , m_fpPropPageCallback(NULL)
 {
     *phr = S_OK;
     m_pInput = new CVideoInputPin(TEXT("CVideoInputPin"), this, phr, L"Input");
@@ -98,6 +99,7 @@ HRESULT CLAVVideo::CreateTrayIcon()
     if (CBaseTrayIcon::ProcessBlackList())
         return S_FALSE;
     m_pTrayIcon = new CBaseTrayIcon(this, TEXT(LAV_VIDEO), IDI_ICON1);
+    m_pTrayIcon->SetCustomOpenPropPage(m_fpPropPageCallback);
     return S_OK;
 }
 
@@ -444,7 +446,9 @@ STDMETHODIMP CLAVVideo::NonDelegatingQueryInterface(REFIID riid, void **ppv)
     *ppv = nullptr;
 
     return QI(ISpecifyPropertyPages) QI(ISpecifyPropertyPages2) QI(IPropertyBag) QI2(ILAVVideoSettings)
+        QI2(ILAVVideoSettingsMPCHCCustom)
         QI2(ILAVVideoStatus) __super::NonDelegatingQueryInterface(riid, ppv);
+
 }
 
 // ISpecifyPropertyPages2
@@ -1069,8 +1073,8 @@ HRESULT CLAVVideo::CompleteConnect(PIN_DIRECTION dir, IPin *pReceivePin)
         BOOL bFailNonDXVA = false;
         // Fail P010 software connections before Windows 10 Creators Update (presumably it was fixed before Creators
         // already, but this is definitely a safe known condition)
-        if (!IsWindows10BuildOrNewer(15063) && (m_pOutput->CurrentMediaType().subtype == MEDIASUBTYPE_P010 ||
-                                                m_pOutput->CurrentMediaType().subtype == MEDIASUBTYPE_P016))
+        if (!IsWindows10BuildOrNewer(15063) && m_pOutput->CurrentMediaType().subtype == MEDIASUBTYPE_P010 ||
+                                               m_pOutput->CurrentMediaType().subtype == MEDIASUBTYPE_P016)
         {
             // Check if we're connecting to EVR
             IBaseFilter *pFilter = GetFilterFromPin(pReceivePin);
@@ -1496,6 +1500,10 @@ HRESULT CLAVVideo::ReconnectOutput(int width, int height, AVRational ar, DXVA2_E
         {
             pBIH->biWidth = FFALIGN(width, 48);
         }
+        else if ((width & 1) && (mt.subtype == MEDIASUBTYPE_NV12 || mt.subtype == MEDIASUBTYPE_YV12 || mt.subtype == MEDIASUBTYPE_YUY2 || mt.subtype == MEDIASUBTYPE_I420))
+        {
+            pBIH->biWidth = FFALIGN(width, 2);
+        }
 
         HRESULT hrQA = m_pOutput->GetConnected()->QueryAccept(&mt);
         if (bDXVA)
@@ -1626,6 +1634,7 @@ HRESULT CLAVVideo::ReconnectOutput(int width, int height, AVRational ar, DXVA2_E
             else
             {
                 DbgLog((LOG_TRACE, 10, L"-> Receive Connection failed (hr: %x); QueryAccept: %x", hr, hrQA));
+                return E_FAIL;
             }
         }
         if (bNeedReconnect && !bDXVA)
@@ -2833,6 +2842,15 @@ STDMETHODIMP_(LAVDeintMode) CLAVVideo::GetDeinterlacingMode()
 STDMETHODIMP CLAVVideo::SetGPUDeviceIndex(DWORD dwDevice)
 {
     m_dwGPUDeviceIndex = dwDevice;
+    return S_OK;
+}
+
+// ILAVVideoSettingsMPCHCCustom
+STDMETHODIMP CLAVVideo::SetPropertyPageCallback(HRESULT (*fpPropPageCallback)(IBaseFilter* pFilter))
+{
+    m_fpPropPageCallback = fpPropPageCallback;
+    if (m_pTrayIcon)
+        m_pTrayIcon->SetCustomOpenPropPage(fpPropPageCallback);
     return S_OK;
 }
 

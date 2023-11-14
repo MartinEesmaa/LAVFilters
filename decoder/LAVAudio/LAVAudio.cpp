@@ -121,6 +121,7 @@ STDMETHODIMP CLAVAudio::CreateTrayIcon()
     if (CBaseTrayIcon::ProcessBlackList())
         return S_FALSE;
     m_pTrayIcon = new CBaseTrayIcon(this, TEXT(LAV_AUDIO), IDI_ICON1);
+    m_pTrayIcon->SetCustomOpenPropPage(m_fpPropPageCallback);
     return S_OK;
 }
 
@@ -278,6 +279,9 @@ HRESULT CLAVAudio::ReadSettings(HKEY rootKey)
 
         if (m_settings.MixingLayout == AV_CH_LAYOUT_5POINT1_BACK)
             m_settings.MixingLayout = AV_CH_LAYOUT_5POINT1;
+
+        if (m_settings.MixingLayout == 0)
+            m_settings.MixingLayout = AV_CH_LAYOUT_STEREO;
 
         dwVal = reg.ReadDWORD(L"MixingFlags", hr);
         if (SUCCEEDED(hr))
@@ -456,7 +460,9 @@ STDMETHODIMP CLAVAudio::NonDelegatingQueryInterface(REFIID riid, void **ppv)
     *ppv = nullptr;
 
     return QI(ISpecifyPropertyPages) QI(ISpecifyPropertyPages2) QI2(ILAVAudioSettings)
+        QI2(ILAVAudioSettingsMPCHCCustom)
         QI2(ILAVAudioStatus) __super::NonDelegatingQueryInterface(riid, ppv);
+
 }
 
 // ISpecifyPropertyPages2
@@ -830,6 +836,15 @@ STDMETHODIMP CLAVAudio::SetSampleConvertDithering(BOOL bEnabled)
 STDMETHODIMP_(BOOL) CLAVAudio::GetSampleConvertDithering()
 {
     return m_settings.SampleConvertDither;
+}
+
+// ILAVAudioSettingsMPCHCCustom
+STDMETHODIMP CLAVAudio::SetPropertyPageCallback(HRESULT (*fpPropPageCallback)(IBaseFilter* pFilter))
+{
+    m_fpPropPageCallback = fpPropPageCallback;
+    if (m_pTrayIcon)
+        m_pTrayIcon->SetCustomOpenPropPage(fpPropPageCallback);
+    return S_OK;  
 }
 
 STDMETHODIMP CLAVAudio::SetSuppressFormatChanges(BOOL bEnabled)
@@ -1313,7 +1328,7 @@ HRESULT CLAVAudio::ffmpeg_init(AVCodecID codec, const void *format, const GUID f
     else
     {
         m_faJitter.SetNumSamples(64);
-        m_JitterLimit = MAX_JITTER_DESYNC;
+        m_JitterLimit = MAX_JITTER_DESYNC * 6;
     }
 
     // Fake codecs that are dependant in input bits per sample, mostly to handle QT PCM tracks
@@ -1676,6 +1691,24 @@ HRESULT CLAVAudio::CheckConnect(PIN_DIRECTION dir, IPin *pPin)
 
         // TODO: Check if the upstream source filter is LAVFSplitter, and store that somewhere
         // Validate that this is called before any media type negotiation
+    }
+    else if (dir == PINDIR_OUTPUT) {
+        // Check if we want to bitstream
+        if (m_avBSContext) {
+            // Get the filter we're connecting to
+            IBaseFilter *pFilter = GetFilterFromPin(pPin);
+            CLSID guidFilter = GUID_NULL;
+            if (pFilter != nullptr) {
+                if (FAILED(pFilter->GetClassID(&guidFilter))) {
+                    guidFilter = GUID_NULL;
+                }
+                SafeRelease(&pFilter);
+            }
+            // Don't allow connection to AC3Filter and ffdshow
+            if (guidFilter == CLSID_AC3Filter || guidFilter == CLSID_ffdshow_audio || guidFilter == CLSID_ffdshow_audio_raw) {
+                return VFW_E_TYPE_NOT_ACCEPTED;
+            }
+        }
     }
     return __super::CheckConnect(dir, pPin);
 }
