@@ -59,6 +59,7 @@ static FormatMapping video_map[] = {
   { AV_CODEC_ID_AV1,        &MEDIASUBTYPE_AV01,         MKTAG('A','V','0','1'), &FORMAT_VideoInfo2 },
   { AV_CODEC_ID_VVC,        &MEDIASUBTYPE_VVC,          MKTAG('V','V','C',' '), &FORMAT_VideoInfo2 },
   { AV_CODEC_ID_CFHD,       &MEDIASUBTYPE_CFHD,         MKTAG('C','F','H','D'), &FORMAT_VideoInfo2 },
+  { AV_CODEC_ID_VVC,        &MEDIASUBTYPE_VVC1,         MKTAG('V','V','C','1'), &FORMAT_MPEG2Video },
 };
 // clang-format on
 
@@ -194,10 +195,16 @@ VIDEOINFOHEADER *CLAVFVideoHelper::CreateVIH(const AVStream *avstream, ULONG *si
     }
 
     DbgLog((LOG_TRACE, 10, L"CreateVIH: r_avg: %I64d, avg_avg: %I64d, tb_avg: %I64d", r_avg, avg_avg, codec_avg));
-    if (r_avg >= MIN_TIME_PER_FRAME && r_avg <= MAX_TIME_PER_FRAME)
+    if (avg_avg >= MIN_TIME_PER_FRAME && avg_avg <= MAX_TIME_PER_FRAME)
+    {
+        // prefer the more accurate r_avg when its close to the average
+        if (abs(r_avg - avg_avg) < 10000)
+            pvi->AvgTimePerFrame = r_avg;
+        else
+            pvi->AvgTimePerFrame = avg_avg;
+    }
+    else if (r_avg >= MIN_TIME_PER_FRAME && r_avg <= MAX_TIME_PER_FRAME)
         pvi->AvgTimePerFrame = r_avg;
-    else if (avg_avg >= MIN_TIME_PER_FRAME && avg_avg <= MAX_TIME_PER_FRAME)
-        pvi->AvgTimePerFrame = avg_avg;
     else if (codec_avg >= MIN_TIME_PER_FRAME && codec_avg <= MAX_TIME_PER_FRAME)
         pvi->AvgTimePerFrame = codec_avg;
     else
@@ -443,6 +450,12 @@ MPEG2VIDEOINFO *CLAVFVideoHelper::CreateMPEG2VI(const AVStream *avstream, ULONG 
             if (ret < 0)
                 bCopyUntouched = TRUE;
         }
+        else if (avstream->codecpar->codec_id == AV_CODEC_ID_VVC)
+        {
+            int ret = ProcessVVCExtradata(extradata, extra, mp2vi);
+            if (ret < 0)
+                bCopyUntouched = TRUE;
+        }
         else if (avstream->codecpar->codec_id == AV_CODEC_ID_MPEG2VIDEO)
         {
             CExtradataParser parser = CExtradataParser(extradata, extra);
@@ -535,6 +548,15 @@ HRESULT CLAVFVideoHelper::ProcessH264MVCExtradata(BYTE *extradata, int extradata
 }
 
 HRESULT CLAVFVideoHelper::ProcessHEVCExtradata(BYTE *extradata, int extradata_size, MPEG2VIDEOINFO *mp2vi)
+{
+    if (extradata[0] || extradata[1] || extradata[2] > 1 && extradata_size > 25)
+    {
+        mp2vi->dwFlags = (extradata[21] & 3) + 1;
+    }
+    return -1;
+}
+
+HRESULT CLAVFVideoHelper::ProcessVVCExtradata(BYTE *extradata, int extradata_size, MPEG2VIDEOINFO *mp2vi)
 {
     if (extradata[0] || extradata[1] || extradata[2] > 1 && extradata_size > 25)
     {

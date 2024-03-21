@@ -40,6 +40,7 @@
 #pragma warning(disable : 4018)
 #pragma warning(disable : 4101)
 #pragma warning(disable : 4244)
+#pragma warning(disable : 5033)
 extern "C"
 {
 #define AVCODEC_X86_MATHOPS_H
@@ -421,9 +422,8 @@ void CLAVAudio::ffmpeg_shutdown()
     m_pAVCodec = nullptr;
     if (m_pAVCtx)
     {
-        avcodec_close(m_pAVCtx);
         av_freep(&m_pAVCtx->extradata);
-        av_freep(&m_pAVCtx);
+        avcodec_free_context(&m_pAVCtx);
     }
     av_frame_free(&m_pFrame);
     av_packet_free(&m_pDecodePacket);
