@@ -364,6 +364,10 @@ trynoformat:
         av_dict_set(&options, "framerate", "1", 0);     // image framerate
     }
     av_dict_set(&options, "max_reload", "7", 0);        // playlist reloading for HLS
+    if (imageformat) {
+        av_dict_set(&options, "loop", "1", 0);          // loop images
+        av_dict_set(&options, "framerate", "1", 0);     // image framerate
+    }
 
     // send global side data to the decoder
     av_format_inject_global_side_data(m_avFormat);
