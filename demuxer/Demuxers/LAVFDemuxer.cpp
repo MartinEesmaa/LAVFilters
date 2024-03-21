@@ -359,10 +359,6 @@ trynoformat:
     av_dict_set(&options, "reconnect", "1", 0);         // for http, reconnect if we get disconnected
     av_dict_set(&options, "referer", fileName, 0);      // for http, send self as referer
     av_dict_set(&options, "skip_clear", "1", 0);        // mpegts program handling
-    if (imageformat) {
-        av_dict_set(&options, "loop", "1", 0);          // loop images
-        av_dict_set(&options, "framerate", "1", 0);     // image framerate
-    }
     av_dict_set(&options, "max_reload", "7", 0);        // playlist reloading for HLS
     if (imageformat) {
         av_dict_set(&options, "loop", "1", 0);          // loop images
