@@ -936,7 +936,6 @@ STDMETHODIMP CLAVFDemuxer::InitAVFormat(LPCOLESTR pszFileName, BOOL bForce)
         }
     }
 
-#if _WIN64
     if (AVDictionaryEntry *cue = av_dict_get(m_avFormat->metadata, "CUESHEET", nullptr, 0))
     {
         CCueSheet cueSheet;
@@ -962,7 +961,6 @@ STDMETHODIMP CLAVFDemuxer::InitAVFormat(LPCOLESTR pszFileName, BOOL bForce)
             }
         }
     }
-#endif
 
     CHECK_HR(hr = CreateStreams());
 
