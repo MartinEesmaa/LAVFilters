@@ -43,9 +43,7 @@ extern "C"
 
     enum AVCodecID ff_get_pcm_codec_id(int bps, int flt, int be, int sflags);
 #include "libavformat/isom.h"
-
-    AVChapter *avpriv_new_chapter(AVFormatContext *s, int id, AVRational time_base, int64_t start, int64_t end,
-                                  const char *title);
+#include "libavformat/demux.h"
 }
 
 #ifdef DEBUG
@@ -143,9 +141,9 @@ STDMETHODIMP CLAVFDemuxer::NonDelegatingQueryInterface(REFIID riid, void **ppv)
 
 /////////////////////////////////////////////////////////////////////////////
 // Demuxer Functions
-STDMETHODIMP CLAVFDemuxer::Open(LPCOLESTR pszFileName)
+STDMETHODIMP CLAVFDemuxer::Open(LPCOLESTR pszFileName, LPCOLESTR pszUserAgent, LPCOLESTR pszReferrer)
 {
-    return OpenInputStream(nullptr, pszFileName, nullptr, TRUE);
+    return OpenInputStream(nullptr, pszFileName, nullptr, TRUE, false, pszUserAgent, pszReferrer);
 }
 
 STDMETHODIMP CLAVFDemuxer::Start()
@@ -229,7 +227,8 @@ static std::pair<const char *, const char *> rtmpParametersTranslate[] = {
     std::make_pair("tcUrl", "rtmp_tcurl")};
 
 STDMETHODIMP CLAVFDemuxer::OpenInputStream(AVIOContext *byteContext, LPCOLESTR pszFileName, const char *format,
-                                           BOOL bForce, BOOL bFileSource)
+                                           BOOL bForce, BOOL bFileSource, LPCOLESTR pszUserAgent,
+                                           LPCOLESTR pszReferrer)
 {
     CAutoLock lock(m_pLock);
     HRESULT hr = S_OK;
@@ -245,6 +244,14 @@ STDMETHODIMP CLAVFDemuxer::OpenInputStream(AVIOContext *byteContext, LPCOLESTR p
     {
         fileName = (char *)CoTaskMemAlloc(1);
         *fileName = 0;
+    }
+
+    // handle pipe, we only support stdin pipes
+    if (_strnicmp("pipe://", fileName, 7) == 0)
+    {
+        // convert pipe://stdin to pipe:0
+        fileName[5] = '0';
+        fileName[6] = 0;
     }
 
     if (_strnicmp("mms:", fileName, 4) == 0)
@@ -357,12 +364,33 @@ trynoformat:
     av_dict_set(&options, "icy", "1", 0);               // request ICY metadata
     av_dict_set(&options, "advanced_editlist", "0", 0); // disable broken mov editlist handling
     av_dict_set(&options, "reconnect", "1", 0);         // for http, reconnect if we get disconnected
-    av_dict_set(&options, "referer", fileName, 0);      // for http, send self as referer
     av_dict_set(&options, "skip_clear", "1", 0);        // mpegts program handling
     av_dict_set(&options, "max_reload", "7", 0);        // playlist reloading for HLS
     if (imageformat) {
         av_dict_set(&options, "loop", "1", 0);          // loop images
         av_dict_set(&options, "framerate", "1", 0);     // image framerate
+    }
+
+    if (pszUserAgent)
+    {
+        char *strUserAgent = CoTaskGetMultiByteFromWideChar(CP_UTF8, 0, pszUserAgent, -1);
+        if (strUserAgent && *strUserAgent) // if valid, and non-empty
+            av_dict_set(&options, "user_agent", strUserAgent, 0);
+
+        SAFE_CO_FREE(strUserAgent);
+    }
+
+    if (pszReferrer != NULL)
+    {
+        char *strReferrer = CoTaskGetMultiByteFromWideChar(CP_UTF8, 0, pszReferrer, -1);
+        if (strReferrer && *strReferrer) // if valid, and non-empty
+            av_dict_set(&options, "referer", strReferrer, 0);
+
+        SAFE_CO_FREE(strReferrer);
+    }
+    else
+    {
+        av_dict_set(&options, "referer", fileName, 0); // for http, send self as referer if none was specified explicitly
     }
 
     // send global side data to the decoder

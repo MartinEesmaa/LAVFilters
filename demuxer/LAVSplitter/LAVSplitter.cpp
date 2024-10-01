@@ -578,7 +578,12 @@ STDMETHODIMP CLAVSplitter::BreakInputConnection()
 // IFileSourceFilter
 STDMETHODIMP CLAVSplitter::Load(LPCOLESTR pszFileName, const AM_MEDIA_TYPE *pmt)
 {
-    CheckPointer(pszFileName, E_POINTER);
+    return LoadURL(pszFileName, NULL, NULL);
+}
+
+STDMETHODIMP CLAVSplitter::LoadURL(LPCOLESTR pszURL, LPCOLESTR pszUserAgent, LPCOLESTR pszReferrer)
+{
+    CheckPointer(pszURL, E_POINTER);
     if (m_State != State_Stopped)
         return E_UNEXPECTED;
 
@@ -589,13 +594,13 @@ STDMETHODIMP CLAVSplitter::Load(LPCOLESTR pszFileName, const AM_MEDIA_TYPE *pmt)
     // Close, just in case we're being re-used
     Close();
 
-    m_fileName = std::wstring(pszFileName);
+    m_fileName = std::wstring(pszURL);
 
     HRESULT hr = S_OK;
     SAFE_DELETE(m_pDemuxer);
-    LPWSTR extension = PathFindExtensionW(pszFileName);
+    LPWSTR extension = PathFindExtensionW(pszURL);
 
-    DbgLog((LOG_TRACE, 10, L"::Load(): Opening file '%s' (extension: %s)", pszFileName, extension));
+    DbgLog((LOG_TRACE, 10, L"::Load(): Opening file '%s' (extension: %s)", pszURL, extension));
 
     // BDMV uses the BD demuxer, everything else LAVF
     if (_wcsicmp(extension, L".bdmv") == 0 || _wcsicmp(extension, L".mpls") == 0)
@@ -606,7 +611,7 @@ STDMETHODIMP CLAVSplitter::Load(LPCOLESTR pszFileName, const AM_MEDIA_TYPE *pmt)
     {
         m_pDemuxer = new CLAVFDemuxer(this, this);
     }
-    if (FAILED(hr = m_pDemuxer->Open(pszFileName)))
+    if (FAILED(hr = m_pDemuxer->Open(pszURL, pszUserAgent, pszReferrer)))
     {
         SAFE_DELETE(m_pDemuxer);
         return hr;
@@ -2223,5 +2228,5 @@ STDMETHODIMP CLAVSplitterSource::NonDelegatingQueryInterface(REFIID riid, void *
 
     *ppv = nullptr;
 
-    return QI(IFileSourceFilter) QI(IAMOpenProgress) __super::NonDelegatingQueryInterface(riid, ppv);
+    return QI(IFileSourceFilter) QI(IURLSourceFilterLAV) QI(IAMOpenProgress) __super::NonDelegatingQueryInterface(riid, ppv);
 }
