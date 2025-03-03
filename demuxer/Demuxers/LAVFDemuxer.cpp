@@ -2133,17 +2133,17 @@ STDMETHODIMP CLAVFDemuxer::GetKeyFrames(const GUID *pFormat, REFERENCE_TIME *pKF
                 MOVStreamContext *sc = (MOVStreamContext *)stream->priv_data;
                 if (i < sc->sample_offsets_count)
                     timestamp += (sc->sample_offsets[i] + sc->dts_shift);
-                else if (sc->ctts_count)
+                else if (sc->tts_count)
                 {
                     // find the next CTTS entry, if needed
-                    while (ctts_sample_counter <= i && ctts_index < sc->ctts_count)
+                    while (ctts_sample_counter <= i && ctts_index < sc->tts_count)
                     {
-                        ctts_sample_counter += sc->ctts_data[ctts_index++].count;
+                        ctts_sample_counter += sc->tts_data[ctts_index++].count;
                     }
 
                     // apply the CTTS offset to the timestamp
                     if (ctts_sample_counter > i)
-                        timestamp += (sc->ctts_data[ctts_index - 1].duration + sc->dts_shift);
+                        timestamp += (sc->tts_data[ctts_index - 1].offset + sc->dts_shift);
                     else
                         timestamp += (sc->min_corrected_pts + sc->dts_shift);
                 }
@@ -3007,6 +3007,15 @@ const CBaseDemuxer::stream *CLAVFDemuxer::SelectAudioStream(std::list<std::strin
                 }
                 AVStream *old_stream = m_avFormat->streams[best->pid];
                 AVStream *new_stream = m_avFormat->streams[(*sit)->pid];
+
+                // ignore streams with an unknown codec
+                if (new_stream->codecpar->codec_id == AV_CODEC_ID_NONE)
+                    continue;
+                else if (old_stream->codecpar->codec_id == AV_CODEC_ID_NONE)
+                {
+                    best = *sit;
+                    continue;
+                }
 
                 int check_nb_f = av_lav_stream_codec_info_nb_frames(new_stream);
                 int best_nb_f = av_lav_stream_codec_info_nb_frames(old_stream);
