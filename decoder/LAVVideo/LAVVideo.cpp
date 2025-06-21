@@ -722,17 +722,17 @@ HRESULT CLAVVideo::CreateDecoder(const CMediaType *pmt)
 
     // Read and store stream-level sidedata
     IMediaSideData *pPinSideData = nullptr;
+    MediaSideDataFFMpeg *pSideDataFFmpeg = nullptr;
     hr = FindPinIntefaceInGraph(m_pInput, __uuidof(IMediaSideData), (void **)&pPinSideData);
     if (SUCCEEDED(hr))
     {
-        MediaSideDataFFMpeg *pSideData = nullptr;
         size_t size = 0;
-        hr = pPinSideData->GetSideData(IID_MediaSideDataFFMpeg, (const BYTE **)&pSideData, &size);
+        hr = pPinSideData->GetSideData(IID_MediaSideDataFFMpeg, (const BYTE **)&pSideDataFFmpeg, &size);
         if (SUCCEEDED(hr) && size == sizeof(MediaSideDataFFMpeg))
         {
-            for (int i = 0; i < pSideData->side_data_elems; i++)
+            for (int i = 0; i < pSideDataFFmpeg->side_data_elems; i++)
             {
-                AVPacketSideData *sd = &pSideData->side_data[i];
+                AVPacketSideData *sd = &pSideDataFFmpeg->side_data[i];
 
                 // Display Mastering metadata, including color info
                 if (sd->type == AV_PKT_DATA_MASTERING_DISPLAY_METADATA &&
@@ -823,7 +823,7 @@ HRESULT CLAVVideo::CreateDecoder(const CMediaType *pmt)
 
     SAFE_CO_FREE(pszExtension);
 
-    hr = m_Decoder.CreateDecoder(pmt, codec);
+    hr = m_Decoder.CreateDecoder(pmt, codec, pSideDataFFmpeg);
     if (FAILED(hr))
     {
         DbgLog((LOG_TRACE, 10, L"-> Decoder creation failed"));
@@ -833,12 +833,12 @@ HRESULT CLAVVideo::CreateDecoder(const CMediaType *pmt)
     // Get avg time per frame
     videoFormatTypeHandler(pmt->Format(), pmt->FormatType(), nullptr, &m_rtAvgTimePerFrame);
 
-    LAVPixelFormat pix;
+    LAVPixelFormat pix, sw_pixfmt;
     int bpp;
-    m_Decoder.GetPixelFormat(&pix, &bpp);
+    m_Decoder.GetPixelFormat(&pix, &bpp, &sw_pixfmt);
 
     // Set input on the converter, and force negotiation if needed
-    if (m_PixFmtConverter.SetInputFmt(pix, bpp) && m_pOutput->IsConnected())
+    if (m_PixFmtConverter.SetInputFmt(sw_pixfmt, bpp) && m_pOutput->IsConnected())
         m_bForceFormatNegotiation = TRUE;
 
     if (pix == LAVPixFmt_YUV420 || pix == LAVPixFmt_YUV422 || pix == LAVPixFmt_NV12)
@@ -859,17 +859,27 @@ HRESULT CLAVVideo::CheckDirectMode()
 {
     LAVPixelFormat pix;
     int bpp;
-    m_Decoder.GetPixelFormat(&pix, &bpp);
+    m_Decoder.GetPixelFormat(&pix, &bpp, nullptr);
 
-    BOOL bDirect = (pix == LAVPixFmt_NV12 || pix == LAVPixFmt_P016);
+    GUID outputSubtype = m_pOutput->CurrentMediaType().subtype;
+
+    BOOL bDirect = (pix == LAVPixFmt_NV12 || pix == LAVPixFmt_P016 || pix == LAVPixFmt_YUY2 || pix == LAVPixFmt_Y216 || pix == LAVPixFmt_AYUV || pix == LAVPixFmt_Y410 || pix == LAVPixFmt_Y416);
     if (pix == LAVPixFmt_NV12 && m_Decoder.IsInterlaced(FALSE) && m_settings.SWDeintMode != SWDeintMode_None)
         bDirect = FALSE;
-    else if (pix == LAVPixFmt_NV12 && m_pOutput->CurrentMediaType().subtype != MEDIASUBTYPE_NV12 &&
-             m_pOutput->CurrentMediaType().subtype != MEDIASUBTYPE_YV12)
+    else if (pix == LAVPixFmt_NV12 && outputSubtype != MEDIASUBTYPE_NV12 && outputSubtype != MEDIASUBTYPE_YV12)
         bDirect = FALSE;
-    else if (pix == LAVPixFmt_P016 && m_pOutput->CurrentMediaType().subtype != MEDIASUBTYPE_P010 &&
-             m_pOutput->CurrentMediaType().subtype != MEDIASUBTYPE_P016 &&
-             m_pOutput->CurrentMediaType().subtype != MEDIASUBTYPE_NV12)
+    else if (pix == LAVPixFmt_P016 && outputSubtype != MEDIASUBTYPE_P010 && outputSubtype != MEDIASUBTYPE_P016 &&
+             outputSubtype != MEDIASUBTYPE_NV12)
+        bDirect = FALSE;
+    else if (pix == LAVPixFmt_YUY2 && outputSubtype != MEDIASUBTYPE_YUY2 && outputSubtype != MEDIASUBTYPE_YV16)
+        bDirect = FALSE;
+    else if (pix == LAVPixFmt_Y216 && outputSubtype != MEDIASUBTYPE_P210 && outputSubtype != MEDIASUBTYPE_P216)
+        bDirect = FALSE;
+    else if (pix == LAVPixFmt_AYUV && outputSubtype != MEDIASUBTYPE_AYUV)
+        bDirect = FALSE;
+    else if (pix == LAVPixFmt_Y410 && outputSubtype != MEDIASUBTYPE_Y410)
+        bDirect = FALSE;
+    else if (pix == LAVPixFmt_Y416 && outputSubtype != MEDIASUBTYPE_Y416)
         bDirect = FALSE;
     else if (m_SubtitleConsumer && m_SubtitleConsumer->HasProvider())
         bDirect = FALSE;
@@ -1103,7 +1113,7 @@ HRESULT CLAVVideo::CompleteConnect(PIN_DIRECTION dir, IPin *pReceivePin)
             if (bFailNonDXVA)
             {
                 LAVPixelFormat fmt;
-                m_Decoder.GetPixelFormat(&fmt, nullptr);
+                m_Decoder.GetPixelFormat(&fmt, nullptr, nullptr);
 
                 if (fmt != LAVPixFmt_DXVA2)
                 {
@@ -1647,6 +1657,8 @@ HRESULT CLAVVideo::ReconnectOutput(int width, int height, AVRational ar, DXVA2_E
             NotifyEvent(EC_VIDEO_SIZE_CHANGED, MAKELPARAM(width, height), 0);
 
         hr = S_OK;
+
+        CheckDirectMode();
     }
 
     return hr;
@@ -2107,9 +2119,9 @@ HRESULT CLAVVideo::DeliverToRenderer(LAVFrame *pFrame)
         height = 1080;
     }
 
-    if (m_PixFmtConverter.SetInputFmt(pFrame->format, pFrame->bpp) || m_bForceFormatNegotiation)
+    if (m_PixFmtConverter.SetInputFmt(pFrame->sw_format, pFrame->bpp) || m_bForceFormatNegotiation)
     {
-        DbgLog((LOG_TRACE, 10, L"::Decode(): Changed input pixel format to %d (%d bpp)", pFrame->format, pFrame->bpp));
+        DbgLog((LOG_TRACE, 10, L"::Decode(): Changed input pixel format to %d (%d bpp, hw: %d)", pFrame->sw_format, pFrame->bpp, (pFrame->format != pFrame->sw_format)));
 
         CMediaType &mt = m_pOutput->CurrentMediaType();
 
@@ -2315,6 +2327,7 @@ HRESULT CLAVVideo::DeliverToRenderer(LAVFrame *pFrame)
             pFrame->data[0] = pDataOut;
             pFrame->stride[0] = strideBytes;
             pFrame->format = pixFmt;
+            pFrame->sw_format = pixFmt;
             pFrame->bpp = 8;
             pFrame->flags |= LAV_FRAME_FLAG_BUFFER_MODIFY;
             m_SubtitleConsumer->ProcessFrame(pFrame);

@@ -36,12 +36,12 @@ class CDecQuickSync : public CDecBase
 
     // ILAVDecoder
     STDMETHODIMP Check();
-    STDMETHODIMP InitDecoder(AVCodecID codec, const CMediaType *pmt);
+    STDMETHODIMP InitDecoder(AVCodecID codec, const CMediaType *pmt, const MediaSideDataFFMpeg *pSideData);
     STDMETHODIMP Decode(const BYTE *buffer, int buflen, REFERENCE_TIME rtStart, REFERENCE_TIME rtStop, BOOL bSyncPoint,
                         BOOL bDiscontinuity, IMediaSample *pSample);
     STDMETHODIMP Flush();
     STDMETHODIMP EndOfStream();
-    STDMETHODIMP GetPixelFormat(LAVPixelFormat *pPix, int *pBpp);
+    STDMETHODIMP GetPixelFormat(LAVPixelFormat *pPix, int *pBpp, LAVPixelFormat *pPixSoftware);
     STDMETHODIMP_(REFERENCE_TIME) GetFrameDuration();
     STDMETHODIMP_(BOOL) IsInterlaced(BOOL bAllowGuess);
     STDMETHODIMP_(const WCHAR *) GetDecoderName() { return L"quicksync"; }

@@ -366,10 +366,7 @@ trynoformat:
     av_dict_set(&options, "reconnect", "1", 0);         // for http, reconnect if we get disconnected
     av_dict_set(&options, "skip_clear", "1", 0);        // mpegts program handling
     av_dict_set(&options, "max_reload", "7", 0);        // playlist reloading for HLS
-    if (imageformat) {
-        av_dict_set(&options, "loop", "1", 0);          // loop images
-        av_dict_set(&options, "framerate", "1", 0);     // image framerate
-    }
+    av_dict_set(&options, "extension_picky", "0", 0);   // less strict HLS parsing
 
     if (pszUserAgent)
     {
@@ -392,9 +389,6 @@ trynoformat:
     {
         av_dict_set(&options, "referer", fileName, 0); // for http, send self as referer if none was specified explicitly
     }
-
-    // send global side data to the decoder
-    av_format_inject_global_side_data(m_avFormat);
 
     if (rtsp_transport != nullptr)
     {
@@ -2884,19 +2878,19 @@ static int audio_codec_priority(const AVCodecParameters *par)
         {
             priority = 7;
 
-            if (par->profile == FF_PROFILE_DTS_EXPRESS)
+            if (par->profile == AV_PROFILE_DTS_EXPRESS)
             {
                 priority -= 1;
             }
-            else if (par->profile == FF_PROFILE_DTS_HD_MA)
+            else if (par->profile == AV_PROFILE_DTS_HD_MA)
             {
                 priority += 3;
             }
-            else if (par->profile == FF_PROFILE_DTS_HD_HRA)
+            else if (par->profile == AV_PROFILE_DTS_HD_HRA)
             {
                 priority += 2;
             }
-            else if (par->profile >= FF_PROFILE_DTS_ES)
+            else if (par->profile >= AV_PROFILE_DTS_ES)
             {
                 priority += 1;
             }
@@ -3008,10 +3002,10 @@ const CBaseDemuxer::stream *CLAVFDemuxer::SelectAudioStream(std::list<std::strin
                 AVStream *old_stream = m_avFormat->streams[best->pid];
                 AVStream *new_stream = m_avFormat->streams[(*sit)->pid];
 
-                // ignore streams with an unknown codec
-                if (new_stream->codecpar->codec_id == AV_CODEC_ID_NONE)
+                // ignore streams with an unknown codec or no decoder
+                if (new_stream->codecpar->codec_id == AV_CODEC_ID_NONE || avcodec_find_decoder(new_stream->codecpar->codec_id) == NULL)
                     continue;
-                else if (old_stream->codecpar->codec_id == AV_CODEC_ID_NONE)
+                else if (old_stream->codecpar->codec_id == AV_CODEC_ID_NONE || avcodec_find_decoder(old_stream->codecpar->codec_id) == NULL)
                 {
                     best = *sit;
                     continue;

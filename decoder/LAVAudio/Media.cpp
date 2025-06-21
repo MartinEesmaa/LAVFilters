@@ -143,7 +143,6 @@ static const FFMPEG_SUBTYPE_MAP lavc_audio_codecs[] = {
   { &MEDIASUBTYPE_729A,         AV_CODEC_ID_G729     },
   { &MEDIASUBTYPE_G729,         AV_CODEC_ID_G729     },
   { &MEDIASUBTYPE_IMC,          AV_CODEC_ID_IMC      },
-  
   // Special LAVFSplitter interface
   { &MEDIASUBTYPE_FFMPEG_AUDIO, AV_CODEC_ID_NONE     },
 };
@@ -697,9 +696,7 @@ static codec_config_t m_codec_config[] = {
   { 1, { AV_CODEC_ID_TRUESPEECH }},                   // CC_Truespeech
   { 1, { AV_CODEC_ID_TAK }},                          // CC_TAK
   { 3, { AV_CODEC_ID_ATRAC1, AV_CODEC_ID_ATRAC3, AV_CODEC_ID_ATRAC3P }, "atrac", "ATRAC (Adaptive TRansform Acoustic Coding)"}, // CC_ATRAC
-  { 1, { AV_CODEC_ID_ADPCM_IMA_WAV }},                // CC_IMADPCM
-  { 1, { AV_CODEC_ID_ADPCM_G726 }},                   // CC_G726
-  { 1, { AV_CODEC_ID_G729 }},                         // CC_G729
+  { 3, { AV_CODEC_ID_ADPCM_IMA_WAV, AV_CODEC_ID_ADPCM_G726, AV_CODEC_ID_G729 }, "adpcm", "ADPCM (adaptive differential pcm)"},  // CC_ADPCM
   { 1, { AV_CODEC_ID_IMC }},                          // CC_IMC
 };
 // clang-format on

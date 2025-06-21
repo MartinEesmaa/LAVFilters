@@ -54,6 +54,12 @@ typedef enum LAVPixelFormat {
     LAVPixFmt_ARGB32,      ///< ARGB32, in BGRA order
     LAVPixFmt_RGB48,       ///< RGB48, in RGB order (16-bit per pixel)
 
+    /* HW formats */
+    LAVPixFmt_AYUV,        ///< AYUV, 4:4:4 8-bit
+    LAVPixFmt_Y410,        ///< Y410, 4:4:4 10-bit packed into 32-bit, AVYU order (A is 2 bit)
+    LAVPixFmt_Y416,        ///< Y416, 4:4:4 16-bit, AVYU order
+    LAVPixFmt_Y216,        ///< Y210/Y216, 4:2:2, 10 to 16-bit packed into 64-bit, Y0/U/Y1/V
+
     LAVPixFmt_DXVA2,       ///< DXVA2 Surface
     LAVPixFmt_D3D11,       ///< D3D11 Surface
 
@@ -86,6 +92,8 @@ typedef struct LAVDirectBuffer
 {
     BYTE *data[4];       ///< pointer to the picture planes
     ptrdiff_t stride[4]; ///< stride of the planes (in bytes)
+
+    UINT Width, Height;  ///< width/height of the locked texture
 } LAVDirectBuffer;
 
 typedef struct LAVFrameSideData
@@ -117,6 +125,7 @@ typedef struct LAVFrame
     ptrdiff_t stride[4]; ///< stride of the planes (in bytes)
 
     LAVPixelFormat format; ///< pixel format of the frame
+    LAVPixelFormat sw_format;
     int bpp;               ///< bits per pixel, only meaningful for YUV420bX, YUV422bX or YUV444bX
 
     REFERENCE_TIME rtStart; ///< start time of the frame. unset if AV_NOPTS_VALUE
@@ -347,7 +356,7 @@ interface ILAVDecoder
      * @param pmt DirectShow Media Type
      * @return S_OK on success, an error code otherwise
      */
-    STDMETHOD(InitDecoder)(AVCodecID codec, const CMediaType *pmt) PURE;
+    STDMETHOD(InitDecoder)(AVCodecID codec, const CMediaType *pmt, const MediaSideDataFFMpeg *pSideData) PURE;
 
     /**
      * Decode a frame.
@@ -383,7 +392,7 @@ interface ILAVDecoder
      *
      * @return the pixel format used in the decoding process
      */
-    STDMETHOD(GetPixelFormat)(LAVPixelFormat * pPix, int *pBpp) PURE;
+    STDMETHOD(GetPixelFormat)(LAVPixelFormat * pPix, int *pBpp, LAVPixelFormat *pPixSoftware) PURE;
 
     /**
      * Get the frame duration.

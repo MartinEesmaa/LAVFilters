@@ -72,6 +72,7 @@ class CLAVPixFmtConverter
 
     BOOL SetInputFmt(enum LAVPixelFormat pixfmt, int bpp)
     {
+        ASSERT(pixfmt != LAVPixFmt_D3D11 && pixfmt != LAVPixFmt_DXVA2);
         if (m_InputPixFmt != pixfmt || m_InBpp != bpp)
         {
             m_InputPixFmt = pixfmt;
@@ -181,6 +182,7 @@ class CLAVPixFmtConverter
     DECLARE_CONV_FUNC(convert_yuv_yv);
     DECLARE_CONV_FUNC(convert_nv12_yv12);
     DECLARE_CONV_FUNC(convert_p010_nv12_sse2);
+    DECLARE_CONV_FUNC(convert_y210_p210_sse4);
     template <int uyvy> DECLARE_CONV_FUNC(convert_yuv420_yuy2);
     template <int uyvy> DECLARE_CONV_FUNC(convert_yuv422_yuy2_uyvy);
     template <int uyvy> DECLARE_CONV_FUNC(convert_yuv422_yuy2_uyvy_dither_le);
@@ -190,8 +192,13 @@ class CLAVPixFmtConverter
     template <int out32> DECLARE_CONV_FUNC(convert_rgb48_rgb);
 
     DECLARE_CONV_FUNC(plane_copy_direct_sse4);
+    DECLARE_CONV_FUNC(plane_copy_direct_nv12_sse4);
     DECLARE_CONV_FUNC(convert_nv12_yv12_direct_sse4);
     DECLARE_CONV_FUNC(convert_p010_nv12_direct_sse4);
+    DECLARE_CONV_FUNC(convert_y210_p210_direct_sse4);
+
+    DECLARE_CONV_FUNC(convert_yuy2_yv16_sse2);
+    DECLARE_CONV_FUNC(convert_yuy2_yv16_direct_sse4);
 
     DECLARE_CONV_FUNC(convert_yuv_rgb);
     const RGBCoeffs *getRGBCoeffs(int width, int height);

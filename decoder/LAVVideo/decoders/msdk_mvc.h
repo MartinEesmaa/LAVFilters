@@ -55,17 +55,19 @@ class CDecMSDKMVC : public CDecBase
     virtual ~CDecMSDKMVC();
 
     // ILAVDecoder
-    STDMETHODIMP InitDecoder(AVCodecID codec, const CMediaType *pmt);
+    STDMETHODIMP InitDecoder(AVCodecID codec, const CMediaType *pmt, const MediaSideDataFFMpeg *pSideData);
     STDMETHODIMP Decode(const BYTE *buffer, int buflen, REFERENCE_TIME rtStart, REFERENCE_TIME rtStop, BOOL bSyncPoint,
                         BOOL bDiscontinuity, IMediaSample *pSample);
     STDMETHODIMP Flush();
     STDMETHODIMP EndOfStream();
-    STDMETHODIMP GetPixelFormat(LAVPixelFormat *pPix, int *pBpp)
+    STDMETHODIMP GetPixelFormat(LAVPixelFormat *pPix, int *pBpp, LAVPixelFormat *pPixSoftware)
     {
         if (pPix)
             *pPix = LAVPixFmt_NV12;
         if (pBpp)
             *pBpp = 8;
+        if (pPixSoftware)
+            *pPixSoftware = LAVPixFmt_NV12;
         return S_OK;
     }
     STDMETHODIMP_(BOOL) IsInterlaced(BOOL bAllowGuess) { return FALSE; }

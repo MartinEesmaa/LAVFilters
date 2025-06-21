@@ -45,8 +45,8 @@ class CDecDXVA2 : public CDecAvcodec
     virtual ~CDecDXVA2(void);
 
     // ILAVDecoder
-    STDMETHODIMP InitDecoder(AVCodecID codec, const CMediaType *pmt);
-    STDMETHODIMP GetPixelFormat(LAVPixelFormat *pPix, int *pBpp);
+    STDMETHODIMP InitDecoder(AVCodecID codec, const CMediaType *pmt, const MediaSideDataFFMpeg *pSideData);
+    STDMETHODIMP GetPixelFormat(LAVPixelFormat *pPix, int *pBpp, LAVPixelFormat *pPixSoftware);
     STDMETHODIMP Flush();
     STDMETHODIMP EndOfStream();
 

@@ -37,6 +37,7 @@ extern "C"
     #include "libavutil/imgutils.h"
     #define FF_DXVA2_WORKAROUND_SCALING_LIST_ZIGZAG 1
     #define FF_DXVA2_WORKAROUND_INTEL_CLEARVIDEO 2
+    #define FF_DXVA2_WORKAROUND_NVIDIA_HEVC_420P12 4
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -467,7 +468,7 @@ HRESULT CDecDXVA2::FindVideoServiceConversion(AVCodecID codec, int profile, D3DF
     for (unsigned i = 0; dxva_modes[i].name; i++)
     {
         const dxva_mode_t *mode = &dxva_modes[i];
-        if (!check_dxva_mode_compatibility(mode, codec, profile, (suggestedOutput == FOURCC_NV12)))
+        if (!check_dxva_mode_compatibility(mode, codec, profile, 0, (suggestedOutput == FOURCC_NV12)))
             continue;
 
         BOOL supported = FALSE;
@@ -930,7 +931,7 @@ STDMETHODIMP CDecDXVA2::Init()
     return S_OK;
 }
 
-STDMETHODIMP CDecDXVA2::InitDecoder(AVCodecID codec, const CMediaType *pmt)
+STDMETHODIMP CDecDXVA2::InitDecoder(AVCodecID codec, const CMediaType *pmt, const MediaSideDataFFMpeg *pSideData)
 {
     HRESULT hr = S_OK;
     DbgLog((LOG_TRACE, 10, L"CDecDXVA2::InitDecoder(): Initializing DXVA2 decoder"));
@@ -976,7 +977,7 @@ STDMETHODIMP CDecDXVA2::InitDecoder(AVCodecID codec, const CMediaType *pmt)
     m_bFailHWDecode = FALSE;
 
     DbgLog((LOG_TRACE, 10, L"-> Creation of DXVA2 decoder successful, initializing ffmpeg"));
-    hr = CDecAvcodec::InitDecoder(codec, pmt);
+    hr = CDecAvcodec::InitDecoder(codec, pmt, pSideData);
     if (FAILED(hr))
     {
         return hr;
@@ -1633,7 +1634,7 @@ HRESULT CDecDXVA2::DeliverDXVA2Frame(LAVFrame *pFrame)
             return S_FALSE;
         }
 
-        GetPixelFormat(&pFrame->format, &pFrame->bpp);
+        GetPixelFormat(&pFrame->format, &pFrame->bpp, &pFrame->sw_format);
         Deliver(pFrame);
     }
     else
@@ -1654,7 +1655,7 @@ HRESULT CDecDXVA2::DeliverDXVA2Frame(LAVFrame *pFrame)
     return S_OK;
 }
 
-STDMETHODIMP CDecDXVA2::GetPixelFormat(LAVPixelFormat *pPix, int *pBpp)
+STDMETHODIMP CDecDXVA2::GetPixelFormat(LAVPixelFormat *pPix, int *pBpp, LAVPixelFormat *pPixSoftware)
 {
     // Output is always NV12 or P010
     if (pPix)
@@ -1667,6 +1668,9 @@ STDMETHODIMP CDecDXVA2::GetPixelFormat(LAVPixelFormat *pPix, int *pBpp)
     }
     if (pBpp)
         *pBpp = (m_eSurfaceFormat == FOURCC_P016) ? 16 : ((m_eSurfaceFormat == FOURCC_P010) ? 10 : 8);
+    if (pPixSoftware)
+        *pPixSoftware =
+            (m_eSurfaceFormat == FOURCC_P010 || m_eSurfaceFormat == FOURCC_P016) ? LAVPixFmt_P016 : LAVPixFmt_NV12;
     return S_OK;
 }
 
@@ -1674,7 +1678,7 @@ __forceinline bool CDecDXVA2::CopyFrame(LAVFrame *pFrame)
 {
     HRESULT hr;
     LPDIRECT3DSURFACE9 pSurface = (LPDIRECT3DSURFACE9)pFrame->data[3];
-    GetPixelFormat(&pFrame->format, &pFrame->bpp);
+    GetPixelFormat(&pFrame->format, &pFrame->bpp, &pFrame->sw_format);
 
     D3DSURFACE_DESC surfaceDesc;
     pSurface->GetDesc(&surfaceDesc);
@@ -1739,6 +1743,9 @@ static bool direct_lock(LAVFrame *pFrame, LAVDirectBuffer *pBuffer)
 
     memset(pBuffer, 0, sizeof(*pBuffer));
 
+    pBuffer->Width = surfaceDesc.Width;
+    pBuffer->Height = surfaceDesc.Height;
+
     pBuffer->data[0] = (BYTE *)LockedRect.pBits;
     pBuffer->data[1] = pBuffer->data[0] + surfaceDesc.Height * LockedRect.Pitch;
 
@@ -1756,7 +1763,7 @@ static void direct_unlock(LAVFrame *pFrame)
 
 bool CDecDXVA2::DeliverDirect(LAVFrame *pFrame)
 {
-    GetPixelFormat(&pFrame->format, &pFrame->bpp);
+    GetPixelFormat(&pFrame->format, &pFrame->bpp, &pFrame->sw_format);
     pFrame->direct = true;
     pFrame->direct_lock = direct_lock;
     pFrame->direct_unlock = direct_unlock;

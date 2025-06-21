@@ -627,7 +627,7 @@ STDMETHODIMP CDecCuvid::InitD3D9(int best_device, DWORD requested_device)
     return S_OK;
 }
 
-STDMETHODIMP CDecCuvid::InitDecoder(AVCodecID codec, const CMediaType *pmt)
+STDMETHODIMP CDecCuvid::InitDecoder(AVCodecID codec, const CMediaType *pmt, const MediaSideDataFFMpeg *pSideData)
 {
     DbgLog((LOG_TRACE, 10, L"CDecCuvid::InitDecoder(): Initializing CUVID decoder"));
     HRESULT hr = S_OK;
@@ -1244,6 +1244,7 @@ STDMETHODIMP CDecCuvid::Deliver(CUVIDPARSERDISPINFO *cuviddisp, int field)
     }
 
     pFrame->format = (m_VideoDecoderInfo.OutputFormat == cudaVideoSurfaceFormat_P016) ? LAVPixFmt_P016 : LAVPixFmt_NV12;
+    pFrame->sw_format = pFrame->format;
     pFrame->bpp = m_VideoDecoderInfo.bitDepthMinus8 + 8;
     pFrame->width = m_VideoFormat.display_area.right;
     pFrame->height = m_VideoFormat.display_area.bottom;
@@ -1324,8 +1325,8 @@ STDMETHODIMP CDecCuvid::CheckHEVCSequence(const BYTE *buffer, int buflen, int *b
     {
         DbgLog((LOG_TRACE, 10, L"-> SPS found"));
         if (hevcParser.sps.chroma > 1 || hevcParser.sps.bitdepth > 12 ||
-            !(hevcParser.sps.profile <= FF_PROFILE_HEVC_MAIN_10 ||
-              (hevcParser.sps.profile == FF_PROFILE_HEVC_REXT &&
+            !(hevcParser.sps.profile <= AV_PROFILE_HEVC_MAIN_10 ||
+              (hevcParser.sps.profile == AV_PROFILE_HEVC_REXT &&
                hevcParser.sps.rext_profile == HEVC_REXT_PROFILE_MAIN_12)))
         {
             DbgLog((LOG_TRACE, 10, L"  -> SPS indicates video incompatible with CUVID, aborting (profile: %d)",
@@ -1499,13 +1500,15 @@ STDMETHODIMP CDecCuvid::EndOfStream()
     return S_OK;
 }
 
-STDMETHODIMP CDecCuvid::GetPixelFormat(LAVPixelFormat *pPix, int *pBpp)
+STDMETHODIMP CDecCuvid::GetPixelFormat(LAVPixelFormat *pPix, int *pBpp, LAVPixelFormat *pPixSoftware)
 {
     // Output is always NV12
     if (pPix)
         *pPix = (m_VideoDecoderInfo.OutputFormat == cudaVideoSurfaceFormat_P016) ? LAVPixFmt_P016 : LAVPixFmt_NV12;
     if (pBpp)
         *pBpp = m_VideoDecoderInfo.bitDepthMinus8 + 8;
+    if (pPixSoftware)
+        *pPixSoftware = (m_VideoDecoderInfo.OutputFormat == cudaVideoSurfaceFormat_P016) ? LAVPixFmt_P016 : LAVPixFmt_NV12;
     return S_OK;
 }
 

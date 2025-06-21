@@ -459,7 +459,7 @@ STDMETHODIMP CDecQuickSync::CheckH264Sequence(const BYTE *buffer, size_t buflen,
     return S_FALSE;
 }
 
-STDMETHODIMP CDecQuickSync::InitDecoder(AVCodecID codec, const CMediaType *pmt)
+STDMETHODIMP CDecQuickSync::InitDecoder(AVCodecID codec, const CMediaType *pmt, const MediaSideDataFFMpeg *pSideData)
 {
     HRESULT hr = S_OK;
     DbgLog((LOG_TRACE, 10, L"CDecQuickSync::InitDecoder(): Initializing QuickSync decoder"));
@@ -790,6 +790,7 @@ STDMETHODIMP CDecQuickSync::HandleFrame(QsFrameData *data)
     AllocateFrame(&pFrame);
 
     pFrame->format = LAVPixFmt_NV12;
+    pFrame->sw_format = pFrame->format;
     pFrame->width = data->rcClip.right - data->rcClip.left + 1;
     pFrame->height = data->rcClip.bottom - data->rcClip.top + 1;
     pFrame->rtStart = data->rtStart;
@@ -847,13 +848,15 @@ STDMETHODIMP CDecQuickSync::EndOfStream()
     return S_OK;
 }
 
-STDMETHODIMP CDecQuickSync::GetPixelFormat(LAVPixelFormat *pPix, int *pBpp)
+STDMETHODIMP CDecQuickSync::GetPixelFormat(LAVPixelFormat *pPix, int *pBpp, LAVPixelFormat *pPixSoftware)
 {
     // Output is always NV12
     if (pPix)
         *pPix = LAVPixFmt_NV12;
     if (pBpp)
         *pBpp = 8;
+    if (pPixSoftware)
+        *pPixSoftware = LAVPixFmt_NV12;
     return S_OK;
 }
 

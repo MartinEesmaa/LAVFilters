@@ -175,7 +175,7 @@ void CDecMSDKMVC::DestroyDecoder(bool bFull)
     }
 }
 
-STDMETHODIMP CDecMSDKMVC::InitDecoder(AVCodecID codec, const CMediaType *pmt)
+STDMETHODIMP CDecMSDKMVC::InitDecoder(AVCodecID codec, const CMediaType *pmt, const MediaSideDataFFMpeg *pSideData)
 {
     if (codec != AV_CODEC_ID_H264_MVC)
         return E_UNEXPECTED;
@@ -786,6 +786,7 @@ HRESULT CDecMSDKMVC::DeliverOutput(MVCBuffer *pBaseView, MVCBuffer *pExtraView)
     pFrame->stride[1] = pBaseView->surface.Data.PitchLow;
 
     pFrame->format = LAVPixFmt_NV12;
+    pFrame->sw_format = pFrame->format;
     pFrame->bpp = 8;
     pFrame->flags |= LAV_FRAME_FLAG_MVC;
 

@@ -21,6 +21,7 @@
 
 #include "decoders/ILAVDecoder.h"
 #include "SynchronizedQueue.h"
+#include "IMediaSideDataFFmpeg.h"
 
 class CLAVVideo;
 
@@ -33,7 +34,7 @@ class CDecodeManager : protected CCritSec
     static ILAVDecoder *CreateHWAccelDecoder(LAVHWAccel hwAccel);
 
     // Decoder management
-    STDMETHODIMP CreateDecoder(const CMediaType *pmt, AVCodecID codec);
+    STDMETHODIMP CreateDecoder(const CMediaType *pmt, AVCodecID codec, const MediaSideDataFFMpeg *pSideData);
     STDMETHODIMP Close();
 
     // Media control
@@ -63,7 +64,7 @@ class CDecodeManager : protected CCritSec
     {
         return m_pDecoder ? m_pDecoder->IsInterlaced(bAllowGuess) : TRUE;
     }
-    STDMETHODIMP GetPixelFormat(LAVPixelFormat *pPix, int *pBpp)
+    STDMETHODIMP GetPixelFormat(LAVPixelFormat *pPix, int *pBpp, LAVPixelFormat *pPixSoftware)
     {
         if (m_pDecoder == NULL)
         {
@@ -71,11 +72,13 @@ class CDecodeManager : protected CCritSec
                 *pPix = LAVPixFmt_None;
             if (pBpp)
                 *pBpp = 8;
+            if (pPixSoftware)
+                *pPixSoftware = LAVPixFmt_None;
 
             return S_FALSE;
         }
 
-        return m_pDecoder->GetPixelFormat(pPix, pBpp);
+        return m_pDecoder->GetPixelFormat(pPix, pBpp, pPixSoftware);
     }
     STDMETHODIMP_(REFERENCE_TIME) GetFrameDuration()
     {
@@ -86,10 +89,16 @@ class CDecodeManager : protected CCritSec
     STDMETHODIMP SetDirectOutput(BOOL bDirect) { return m_pDecoder ? m_pDecoder->SetDirectOutput(bDirect) : S_FALSE; }
 
   private:
+    STDMETHODIMP CreateSideDataCache(const MediaSideDataFFMpeg *pSideData);
+    void FreeSideDataCache();
+
+  private:
     CLAVVideo *m_pLAVVideo = nullptr;
     ILAVDecoder *m_pDecoder = nullptr;
 
     AVCodecID m_Codec = AV_CODEC_ID_NONE;
+
+    MediaSideDataFFMpeg m_SideDataCache{};
 
     BOOL m_bHWDecoder = FALSE;
     BOOL m_bHWDecoderFailed = FALSE;

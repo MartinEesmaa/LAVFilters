@@ -55,23 +55,24 @@ ILAVDecoder *CreateDecoderAVCodec()
 // Create DXVA2 Extended Flags from a AVFrame and AVCodecContext
 ////////////////////////////////////////////////////////////////////////////////
 
-static DXVA2_ExtendedFormat GetDXVA2ExtendedFlags(AVCodecContext *ctx, AVFrame *frame)
+static DXVA2_ExtendedFormat GetDXVA2ExtendedFlags(AVFrame *frame)
 {
     DXVA2_ExtendedFormat fmt;
     ZeroMemory(&fmt, sizeof(fmt));
 
-    fillDXVAExtFormat(fmt, -1, ctx->color_primaries, ctx->colorspace, ctx->color_trc, ctx->chroma_sample_location);
+    fillDXVAExtFormat(fmt, -1, frame->color_primaries, frame->colorspace, frame->color_trc, frame->chroma_location);
 
     if (frame->format == AV_PIX_FMT_XYZ12LE || frame->format == AV_PIX_FMT_XYZ12BE)
         fmt.VideoPrimaries = DXVA2_VideoPrimaries_BT709;
 
     // Color Range, 0-255 or 16-235
-    BOOL ffFullRange = (ctx->color_range == AVCOL_RANGE_JPEG) || frame->format == AV_PIX_FMT_YUVJ420P ||
+    BOOL ffFullRange = (frame->color_range == AVCOL_RANGE_JPEG) || frame->format == AV_PIX_FMT_YUVJ420P ||
                        frame->format == AV_PIX_FMT_YUVJ422P || frame->format == AV_PIX_FMT_YUVJ444P ||
                        frame->format == AV_PIX_FMT_YUVJ440P || frame->format == AV_PIX_FMT_YUVJ411P;
     fmt.NominalRange =
         ffFullRange ? DXVA2_NominalRange_0_255
-                    : (ctx->color_range == AVCOL_RANGE_MPEG) ? DXVA2_NominalRange_16_235 : DXVA2_NominalRange_Unknown;
+                       : (frame->color_range == AVCOL_RANGE_MPEG) ? DXVA2_NominalRange_16_235
+                                                                  : DXVA2_NominalRange_Unknown;
 
     return fmt;
 }
@@ -243,7 +244,15 @@ static struct PixelFormatMapping
     {AV_PIX_FMT_YUV440P12BE, LAVPixFmt_YUV444bX, TRUE, 12},
 
     {AV_PIX_FMT_P010LE, LAVPixFmt_P016, FALSE, 10},
+    {AV_PIX_FMT_P012LE, LAVPixFmt_P016, FALSE, 12},
     {AV_PIX_FMT_P016LE, LAVPixFmt_P016, FALSE, 16},
+
+    {AV_PIX_FMT_VUYX, LAVPixFmt_AYUV, FALSE, 8},
+    {AV_PIX_FMT_XV30, LAVPixFmt_Y410, FALSE, 10},
+    {AV_PIX_FMT_XV48, LAVPixFmt_Y416, FALSE, 10},
+
+    {AV_PIX_FMT_Y210, LAVPixFmt_Y216, FALSE, 10},
+    {AV_PIX_FMT_Y216, LAVPixFmt_Y216, FALSE, 16},
 
     {AV_PIX_FMT_DXVA2_VLD, LAVPixFmt_DXVA2, FALSE},
     {AV_PIX_FMT_D3D11, LAVPixFmt_D3D11, FALSE},
@@ -299,7 +308,7 @@ STDMETHODIMP CDecAvcodec::Init()
     return S_OK;
 }
 
-STDMETHODIMP CDecAvcodec::InitDecoder(AVCodecID codec, const CMediaType *pmt)
+STDMETHODIMP CDecAvcodec::InitDecoder(AVCodecID codec, const CMediaType *pmt, const MediaSideDataFFMpeg *pSideData)
 {
     DestroyDecoder();
     DbgLog((LOG_TRACE, 10, L"Initializing ffmpeg for codec %S", avcodec_get_name(codec)));
@@ -504,7 +513,7 @@ STDMETHODIMP CDecAvcodec::InitDecoder(AVCodecID codec, const CMediaType *pmt)
                 av1.BitSkip(2); // chroma sample position
 
                 // determine pixel format
-                if (m_pAVCtx->profile == FF_PROFILE_AV1_MAIN)
+                if (m_pAVCtx->profile == AV_PROFILE_AV1_MAIN)
                 {
                     if (!monochrome)
                     {
@@ -661,9 +670,30 @@ STDMETHODIMP CDecAvcodec::InitDecoder(AVCodecID codec, const CMediaType *pmt)
         }
     }
 
+    // side data
+    if (pSideData && pSideData->side_data_elems > 0)
+    {
+        m_pAVCtx->coded_side_data =(AVPacketSideData *)av_calloc(pSideData->side_data_elems, sizeof(*pSideData->side_data));
+        if (m_pAVCtx->coded_side_data == nullptr)
+            return E_OUTOFMEMORY;
+
+        for (int i = 0; i < pSideData->side_data_elems; i++)
+        {
+            const AVPacketSideData *src_sd = &pSideData->side_data[i];
+            AVPacketSideData *dst_sd = &m_pAVCtx->coded_side_data[i];
+
+            dst_sd->data = (uint8_t *)av_memdup(src_sd->data, src_sd->size);
+            if (!dst_sd->data)
+                return E_OUTOFMEMORY;
+
+            dst_sd->type = src_sd->type;
+            dst_sd->size = src_sd->size;
+            m_pAVCtx->nb_coded_side_data++;
+        }
+    }
+
     // codec-specific options
     AVDictionary *options = nullptr;
-
 
     // workaround for old/broken x264 streams
     int nX264Build = m_pCallback->GetX264Build();
@@ -1246,7 +1276,7 @@ send_packet:
         pOutFrame->repeat = m_pFrame->repeat_pict;
         pOutFrame->key_frame = !!(m_pFrame->flags & AV_FRAME_FLAG_KEY);
         pOutFrame->frame_type = av_get_picture_type_char(m_pFrame->pict_type);
-        pOutFrame->ext_format = GetDXVA2ExtendedFlags(m_pAVCtx, m_pFrame);
+        pOutFrame->ext_format = GetDXVA2ExtendedFlags(m_pFrame);
 
         if ((m_nCodecId == AV_CODEC_ID_H264 || m_nCodecId == AV_CODEC_ID_MPEG2VIDEO) && m_pFrame->repeat_pict)
             m_nSoftTelecine = 2;
@@ -1279,6 +1309,7 @@ send_packet:
 
         PixelFormatMapping map = getPixFmtMapping((AVPixelFormat)m_pFrame->format);
         pOutFrame->format = map.lavpixfmt;
+        pOutFrame->sw_format = pOutFrame->format;
         pOutFrame->bpp = map.bpp;
 
         if (m_nCodecId == AV_CODEC_ID_MPEG2VIDEO || m_nCodecId == AV_CODEC_ID_MPEG1VIDEO)
@@ -1470,7 +1501,7 @@ STDMETHODIMP CDecAvcodec::Flush()
     if (!(m_pCallback->GetDecodeFlags() & LAV_VIDEO_DEC_FLAG_DVD) &&
         (m_nCodecId == AV_CODEC_ID_H264 || m_nCodecId == AV_CODEC_ID_MPEG2VIDEO))
     {
-        CDecAvcodec::InitDecoder(m_nCodecId, &m_pCallback->GetInputMediaType());
+        CDecAvcodec::InitDecoder(m_nCodecId, &m_pCallback->GetInputMediaType(), nullptr);
     }
 
     return __super::Flush();
@@ -1482,7 +1513,7 @@ STDMETHODIMP CDecAvcodec::EndOfStream()
     return S_OK;
 }
 
-STDMETHODIMP CDecAvcodec::GetPixelFormat(LAVPixelFormat *pPix, int *pBpp)
+STDMETHODIMP CDecAvcodec::GetPixelFormat(LAVPixelFormat *pPix, int *pBpp, LAVPixelFormat *pPixSoftware)
 {
     AVPixelFormat pixfmt = m_pAVCtx ? m_pAVCtx->pix_fmt : AV_PIX_FMT_NONE;
     PixelFormatMapping mapping = getPixFmtMapping(pixfmt);
@@ -1490,6 +1521,8 @@ STDMETHODIMP CDecAvcodec::GetPixelFormat(LAVPixelFormat *pPix, int *pBpp)
         *pPix = mapping.lavpixfmt;
     if (pBpp)
         *pBpp = mapping.bpp;
+    if (pPixSoftware)
+        *pPixSoftware = mapping.lavpixfmt;
     return S_OK;
 }
 

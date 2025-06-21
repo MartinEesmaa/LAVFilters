@@ -178,9 +178,7 @@ VIDEOINFOHEADER *CLAVFVideoHelper::CreateVIH(const AVStream *avstream, ULONG *si
     if (!pvi)
         return nullptr;
     memset(pvi, 0, sizeof(VIDEOINFOHEADER));
-    // Get the frame rate
-    const AVCodecDescriptor *desc = avcodec_descriptor_get(avstream->codecpar->codec_id);
-    bool fields = (desc && (desc->props & AV_CODEC_PROP_FIELDS));
+
     REFERENCE_TIME r_avg = 0, avg_avg = 0, codec_avg = 0;
     if (avstream->r_frame_rate.den > 0 && avstream->r_frame_rate.num > 0)
     {
@@ -432,8 +430,8 @@ MPEG2VIDEOINFO *CLAVFVideoHelper::CreateMPEG2VI(const AVStream *avstream, ULONG 
     mp2vi->hdr.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
 
     // Set profile/level if we know them
-    mp2vi->dwProfile = (avstream->codecpar->profile != FF_PROFILE_UNKNOWN) ? avstream->codecpar->profile : 0;
-    mp2vi->dwLevel = (avstream->codecpar->level != FF_LEVEL_UNKNOWN) ? avstream->codecpar->level : 0;
+    mp2vi->dwProfile = (avstream->codecpar->profile != AV_PROFILE_UNKNOWN) ? avstream->codecpar->profile : 0;
+    mp2vi->dwLevel = (avstream->codecpar->level != AV_LEVEL_UNKNOWN) ? avstream->codecpar->level : 0;
     // mp2vi->dwFlags = 4; // where do we get flags otherwise..?
 
     if (extra > 0)
