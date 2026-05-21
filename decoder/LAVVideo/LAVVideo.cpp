@@ -2855,6 +2855,15 @@ STDMETHODIMP CLAVVideo::SetGPUDeviceIndex(DWORD dwDevice)
     return S_OK;
 }
 
+// ILAVVideoSettingsMPCHCCustom
+STDMETHODIMP CLAVVideo::SetPropertyPageCallback(HRESULT (*fpPropPageCallback)(IBaseFilter* pFilter))
+{
+    m_fpPropPageCallback = fpPropPageCallback;
+    if (m_pTrayIcon)
+        m_pTrayIcon->SetCustomOpenPropPage(fpPropPageCallback);
+    return S_OK;
+}
+
 STDMETHODIMP_(DWORD) CLAVVideo::GetHWAccelNumDevices(LAVHWAccel hwAccel)
 {
     HRESULT hr = S_OK;
