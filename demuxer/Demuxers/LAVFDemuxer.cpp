@@ -1948,7 +1948,7 @@ STDMETHODIMP CLAVFDemuxer::get_ExSeekCapabilities(long *pExCapabilities)
 {
     CheckPointer(pExCapabilities, E_POINTER);
     *pExCapabilities = AM_EXSEEK_CANSEEK;
-    if (m_avFormat->nb_chapters > 0)
+    if (m_avFormat && m_avFormat->nb_chapters > 0)
         *pExCapabilities |= AM_EXSEEK_MARKERSEEK;
     return S_OK;
 }
@@ -1956,6 +1956,7 @@ STDMETHODIMP CLAVFDemuxer::get_ExSeekCapabilities(long *pExCapabilities)
 STDMETHODIMP CLAVFDemuxer::get_MarkerCount(long *pMarkerCount)
 {
     CheckPointer(pMarkerCount, E_POINTER);
+    CheckPointer(m_avFormat, E_UNEXPECTED);
     *pMarkerCount = (long)m_avFormat->nb_chapters;
     return S_OK;
 }
@@ -1963,6 +1964,7 @@ STDMETHODIMP CLAVFDemuxer::get_MarkerCount(long *pMarkerCount)
 STDMETHODIMP CLAVFDemuxer::get_CurrentMarker(long *pCurrentMarker)
 {
     CheckPointer(pCurrentMarker, E_POINTER);
+    CheckPointer(m_avFormat, E_UNEXPECTED);
 
     *pCurrentMarker = 0;
 

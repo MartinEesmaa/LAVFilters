@@ -90,14 +90,7 @@ void CLAVAudio::MATWritePadding()
 {
     if (m_TrueHDMATState.padding > 0)
     {
-        // allocate padding (on the stack of possible)
-        BYTE *padding = (BYTE *)_malloca(m_TrueHDMATState.padding);
-
-        memset(padding, 0, m_TrueHDMATState.padding);
-        int remaining = MATFillDataBuffer(padding, m_TrueHDMATState.padding, true);
-
-        // free the padding block
-        _freea(padding);
+        int remaining = MATFillDataBuffer(nullptr, m_TrueHDMATState.padding, true);
 
         // not all padding could be written to the buffer, write it later
         if (remaining >= 0)
@@ -113,14 +106,20 @@ void CLAVAudio::MATWritePadding()
     }
 }
 
-void CLAVAudio::MATAppendData(const BYTE *p, int size)
+void CLAVAudio::MATAppendData(const BYTE * const p, int size)
 {
-    m_bsOutput.Append(p, size);
+    if (p)
+        m_bsOutput.Append(p, size);
+    else
+        m_bsOutput.AppendZero(size);
+
     m_TrueHDMATState.mat_framesize += size;
 }
 
-int CLAVAudio::MATFillDataBuffer(const BYTE *p, int size, bool padding)
+int CLAVAudio::MATFillDataBuffer(const BYTE *const p, int size, bool padding)
 {
+    ASSERT(p || padding);
+
     if (m_bsOutput.GetCount() >= MAT_BUFFER_LIMIT)
         return size;
 
@@ -147,7 +146,7 @@ int CLAVAudio::MATFillDataBuffer(const BYTE *p, int size, bool padding)
         // write remaining data after the MAT marker
         if (remaining > 0)
         {
-            remaining = MATFillDataBuffer(p + nBytesBefore, remaining, padding);
+            return MATFillDataBuffer(p ? p + nBytesBefore : nullptr, remaining, padding);
         }
 
         return remaining;
@@ -319,8 +318,23 @@ HRESULT CLAVAudio::BitstreamTrueHD(const BYTE *p, int buffsize, HRESULT *hrDeliv
         {
             DbgLog((LOG_TRACE, 10, _T("BitstreamTrueHD(): Detected a stream discontinuity, reseting framesize cache")));
             m_TrueHDMATState.prev_frametime_valid = false;
-            m_TrueHDMATState.nSamplesOffset = 0;
             space_size = 40 * (64 >> (m_TrueHDMATState.ratebits & 7));
+
+            // the output timing is always one frame ahead for buffering reasons, so deduct one frame worth
+            uint32_t prev_output = (uint16_t)(output_timing - frame_samples);
+            if (prev_output < frame_time) // wrap around, output is always in front of frame time
+                prev_output += UINT16_MAX;
+
+            // get the offset of this frame, so we can compare to the previous frame, and determine the amount of padding that needs to be inserted
+            int currentFrameOutputOffset = (prev_output - frame_time);
+
+            // the previous offset should never be smaller then the incoming offset, or we will lack the reserved space
+            ASSERT(m_TrueHDMATState.nOutputTimeOffset >= currentFrameOutputOffset);
+            if (m_TrueHDMATState.nOutputTimeOffset >= currentFrameOutputOffset)
+                m_TrueHDMATState.padding += (m_TrueHDMATState.nOutputTimeOffset - currentFrameOutputOffset) * (64 >> (m_TrueHDMATState.ratebits & 7));
+
+            DbgLog((LOG_TRACE, 10, _T("BitstreamTrueHD(): Carrying forward %d padding (offset %d - %d)"),
+                    m_TrueHDMATState.padding, m_TrueHDMATState.nOutputTimeOffset, currentFrameOutputOffset));
         }
         m_TrueHDMATState.output_timing = output_timing;
         m_TrueHDMATState.output_timing_valid = true;
@@ -338,6 +352,16 @@ HRESULT CLAVAudio::BitstreamTrueHD(const BYTE *p, int buffsize, HRESULT *hrDeliv
         space_size = FFALIGN(m_TrueHDMATState.prev_mat_framesize, (64 >> (m_TrueHDMATState.ratebits & 7)));
 
     m_TrueHDMATState.padding += (space_size - m_TrueHDMATState.prev_mat_framesize);
+
+    // record the offset of frame time to output time, which is used to verify the size of the padding on discontinuities
+    if (m_TrueHDMATState.output_timing_valid)
+    {
+        uint32_t prev_output = (uint16_t)(m_TrueHDMATState.output_timing - frame_samples);
+        if (prev_output < frame_time) // wrap around, output is always in front of frame time
+            prev_output += UINT16_MAX;
+
+        m_TrueHDMATState.nOutputTimeOffset = (prev_output - frame_time);
+    }
 
     // store frame time of the previous frame
     m_TrueHDMATState.prev_frametime = frame_time;
