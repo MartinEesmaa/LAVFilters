@@ -64,7 +64,7 @@ configure() (
     --disable-muxers                \
     --enable-muxer=spdif            \
     --disable-bsfs                  \
-    --enable-bsf=extract_extradata  \
+    --enable-bsf=extract_extradata,dovi_split \
     --disable-avdevice              \
     --disable-encoders              \
     --disable-devices               \
@@ -76,13 +76,14 @@ configure() (
     --enable-schannel               \
     --enable-zlib                   \
     --build-suffix=-lav             \
+    --disable-stripping             \
     --arch=${arch}"
 
-  EXTRA_CFLAGS="-D_WIN32_WINNT=0x0600 -DWINVER=0x0600 -Zo -GS- -I../thirdparty/$archincdir/include/"
+  EXTRA_CFLAGS="-D_WIN32_WINNT=0x0601 -DWINVER=0x0601 -Zo -GS- -I../thirdparty/$archincdir/include/"
   EXTRA_LDFLAGS=""
 
   if $debug ; then
-    OPTIONS="${OPTIONS} --enable-debug"
+    OPTIONS="${OPTIONS} --enable-debug --disable-optimizations"
     EXTRA_CFLAGS="${EXTRA_CFLAGS} -MDd"
     EXTRA_LDFLAGS="${EXTRA_LDFLAGS} -NODEFAULTLIB:libcmt"
   else

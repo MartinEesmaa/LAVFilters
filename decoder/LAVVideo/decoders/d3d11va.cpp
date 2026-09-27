@@ -463,6 +463,33 @@ STDMETHODIMP CDecD3D11::PostConnect(IPin *pPin)
     AVD3D11VADeviceContext *pDeviceContext = (AVD3D11VADeviceContext *)((AVHWDeviceContext *)m_pDevCtx->data)->hwctx;
     pDeviceContext->device = pD3D11Device;
 
+    // check for texture flags
+    ID3D11DecoderTextureConfiguration *pD3D11TextureConfig = nullptr;
+    if (pD3D11DecoderConfiguration)
+    {
+        hr = pPin->QueryInterface(&pD3D11TextureConfig);
+        if (FAILED(hr))
+            DbgLog((LOG_ERROR, 10, L"-> ID3D11DecoderTextureConfiguration not available, using default flags"));
+    }
+
+    if (pD3D11TextureConfig) // renderer provided flags
+    {
+        pDeviceContext->BindFlags = D3D11_BIND_DECODER | pD3D11TextureConfig->GetD3D11TextureBindFlags();
+        pDeviceContext->MiscFlags = pD3D11TextureConfig->GetD3D11TextureMiscFlags();
+
+        SafeRelease(&pD3D11TextureConfig);
+    }
+    else if (pD3D11DecoderConfiguration) // default flags for a D3D11-capable renderer
+    {
+        pDeviceContext->BindFlags = D3D11_BIND_DECODER | D3D11_BIND_SHADER_RESOURCE;
+        pDeviceContext->MiscFlags = D3D11_RESOURCE_MISC_SHARED;
+    }
+    else // flags for copy-back
+    {
+        pDeviceContext->BindFlags = D3D11_BIND_DECODER;
+        pDeviceContext->MiscFlags = 0;
+    }
+
     // finalize the context
     int ret = av_hwdevice_ctx_init(m_pDevCtx);
     if (ret < 0)
@@ -540,8 +567,8 @@ STDMETHODIMP CDecD3D11::PostConnect(IPin *pPin)
         texDesc.Format = m_SurfaceFormat;
         texDesc.SampleDesc.Count = 1;
         texDesc.Usage = D3D11_USAGE_DEFAULT;
-        texDesc.BindFlags = D3D11_BIND_DECODER | D3D11_BIND_SHADER_RESOURCE;
-        texDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED;
+        texDesc.BindFlags = pDeviceContext->BindFlags;
+        texDesc.MiscFlags = pDeviceContext->MiscFlags;
 
         hr = pD3D11Device->CreateTexture2D(&texDesc, nullptr, nullptr);
         if (FAILED(hr))
@@ -562,6 +589,13 @@ STDMETHODIMP CDecD3D11::PostConnect(IPin *pPin)
     else
     {
         m_bReadBackFallback = true;
+    }
+
+    // reset flags for read-back mode
+    if (m_bReadBackFallback)
+    {
+        pDeviceContext->BindFlags = D3D11_BIND_DECODER;
+        pDeviceContext->MiscFlags = 0;
     }
 
     return S_OK;
@@ -1286,10 +1320,6 @@ STDMETHODIMP CDecD3D11::AllocateFramesContext(int width, int height, DXGI_FORMAT
     pFrames->width = width;
     pFrames->height = height;
     pFrames->initial_pool_size = nSurfaces;
-
-    AVD3D11VAFramesContext *pFramesHWContext = (AVD3D11VAFramesContext *)pFrames->hwctx;
-    pFramesHWContext->BindFlags |= D3D11_BIND_DECODER | D3D11_BIND_SHADER_RESOURCE;
-    pFramesHWContext->MiscFlags |= D3D11_RESOURCE_MISC_SHARED;
 
     int ret = av_hwframe_ctx_init(*ppFramesCtx);
     if (ret < 0)

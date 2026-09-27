@@ -318,12 +318,12 @@ HRESULT CLAVAudio::BitstreamTrueHD(const BYTE *p, int buffsize, HRESULT *hrDeliv
         {
             DbgLog((LOG_TRACE, 10, _T("BitstreamTrueHD(): Detected a stream discontinuity, reseting framesize cache")));
             m_TrueHDMATState.prev_frametime_valid = false;
-            space_size = 40 * (64 >> (m_TrueHDMATState.ratebits & 7));
+            space_size = frame_samples * (64 >> (m_TrueHDMATState.ratebits & 7));
 
             // the output timing is always one frame ahead for buffering reasons, so deduct one frame worth
             uint32_t prev_output = (uint16_t)(output_timing - frame_samples);
             if (prev_output < frame_time) // wrap around, output is always in front of frame time
-                prev_output += UINT16_MAX;
+                prev_output += 0x10000;   // unwrap 16-bit value
 
             // get the offset of this frame, so we can compare to the previous frame, and determine the amount of padding that needs to be inserted
             int currentFrameOutputOffset = (prev_output - frame_time);
@@ -358,7 +358,7 @@ HRESULT CLAVAudio::BitstreamTrueHD(const BYTE *p, int buffsize, HRESULT *hrDeliv
     {
         uint32_t prev_output = (uint16_t)(m_TrueHDMATState.output_timing - frame_samples);
         if (prev_output < frame_time) // wrap around, output is always in front of frame time
-            prev_output += UINT16_MAX;
+            prev_output += 0x10000;   // unwrap 16-bit value
 
         m_TrueHDMATState.nOutputTimeOffset = (prev_output - frame_time);
     }

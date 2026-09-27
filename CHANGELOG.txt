@@ -1,5 +1,23 @@
 LAV DirectShow Filters Changelog
 ===================================
+0.83.0 - 2026/08/17
+LAV Splitter
+- Fixed: Various stability improvements for Dolby Vision Enhancement Layer processing
+- Fixed: Matroska files would only show the first 64 tracks
+
+LAV Audio
+- Fixed: Minor timing corrections for TrueHD Atmos bitstreaming
+
+0.82.0 - 2026/06/10
+LAV Splitter
+- NEW: Support for demuxing Dolby Vision Enhancement Layer streams
+- NEW: Support for Animated WebP images
+- Changed: When demuxing Blu-ray discs, Dolby Vision metadata is available on the primary video stream
+
+LAV Video
+- NEW: Support for Animated WebP images
+- Changed: Hardware decoding support for DVDs has been removed
+
 0.81.0 - 2026/01/12
 LAV Splitter
 - NEW: Support for APV (Advanced Professional Video) video streams

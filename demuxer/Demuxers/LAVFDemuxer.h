@@ -34,6 +34,7 @@
 
 class FormatInfo;
 class CBDDemuxer;
+struct AVBSFContext;
 
 #define FFMPEG_FILE_BUFFER_SIZE 32768 // default reading size for ffmpeg
 class CLAVFDemuxer
@@ -88,6 +89,7 @@ class CLAVFDemuxer
 
     // Select the best video stream
     const stream *SelectVideoStream();
+    const stream *SelectVideoELStream(DWORD dwVideoStreamPID);
     // Select the best audio stream
     const stream *SelectAudioStream(std::list<std::string> prefLanguages);
     // Select the best subtitle stream
@@ -168,11 +170,13 @@ class CLAVFDemuxer
     void AddMPEGTSStream(int pid, uint32_t stream_type);
 
   private:
-    STDMETHODIMP AddStream(int streamId);
+    STDMETHODIMP AddStream(int streamId, bool bIsVideoEnhancementLayer = false);
     STDMETHODIMP CreateStreams();
     STDMETHODIMP InitAVFormat(LPCOLESTR pszFileName, BOOL bForce);
     void CleanupAVFormat();
     void UpdateParserFlags(AVStream *st);
+
+    void FlushOnSeek();
 
     REFERENCE_TIME ConvertTimestampToRT(int64_t pts, int num, int den,
                                         int64_t starttime = (int64_t)AV_NOPTS_VALUE) const;
@@ -195,6 +199,13 @@ class CLAVFDemuxer
     STDMETHODIMP QueueMVCExtension(Packet *pPacket);
     STDMETHODIMP FlushMVCExtensionQueue();
     STDMETHODIMP CombineMVCBaseExtension(Packet *pBasePacket);
+
+    STDMETHODIMP CreateDOVIEnhancementLayerSubStream(DWORD dwParentStream);
+    STDMETHODIMP FlushDOVIRPUMergeQueues();
+
+    STDMETHODIMP FetchDOVIPacket(Packet **ppPacket);
+    STDMETHODIMP CombineDOVIRPU(Packet *pPacket);
+    Packet *CreateRPUPacketFromEL(Packet *pPacketEL);
 
   private:
     friend class CBDDemuxer;
@@ -238,6 +249,22 @@ class CLAVFDemuxer
     int m_Abort = 0;
     time_t m_timeAbort = 0;
     time_t m_timeOpening = 0;
-    time_t m_timePacketRead = 0;
 
+    struct
+    {
+        AVBSFContext *bsf = NULL;
+
+        int nBLStreamId = -1;
+        int nELStreamId = -1;
+
+        int nBLNALSize = -1;
+        int nELNALSize = -1;
+
+        bool bBSFSplit = false;
+        bool bRPUMerge = false;
+
+        std::deque<Packet *> queueBLPackets;
+        std::deque<Packet *> queueRPU;
+        std::deque<Packet *> queueMergedPackets;
+    } m_DOVI{};
 };

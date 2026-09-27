@@ -91,35 +91,26 @@ done:
 }
 
 // List of PCI Device ID of ATI cards with UVD or UVD+ decoding block.
-static DWORD UVDDeviceID[] = {0x94C7, // ATI Radeon HD 2350
-                              0x94C1, // ATI Radeon HD 2400 XT
-                              0x94CC, // ATI Radeon HD 2400 Series
-                              0x958A, // ATI Radeon HD 2600 X2 Series
-                              0x9588, // ATI Radeon HD 2600 XT
-                              0x9405, // ATI Radeon HD 2900 GT
-                              0x9400, // ATI Radeon HD 2900 XT
-                              0x9611, // ATI Radeon 3100 Graphics
-                              0x9610, // ATI Radeon HD 3200 Graphics
-                              0x9614, // ATI Radeon HD 3300 Graphics
-                              0x95C0, // ATI Radeon HD 3400 Series (and others)
-                              0x95C5, // ATI Radeon HD 3400 Series (and others)
-                              0x95C4, // ATI Radeon HD 3400 Series (and others)
-                              0x94C3, // ATI Radeon HD 3410
-                              0x9589, // ATI Radeon HD 3600 Series (and others)
-                              0x9598, // ATI Radeon HD 3600 Series (and others)
-                              0x9591, // ATI Radeon HD 3600 Series (and others)
-                              0x9501, // ATI Radeon HD 3800 Series (and others)
-                              0x9505, // ATI Radeon HD 3800 Series (and others)
-                              0x9507, // ATI Radeon HD 3830
-                              0x9513, // ATI Radeon HD 3850 X2
-                              0x950F, // ATI Radeon HD 3850 X2
+// The IDs mask the last digit off to cover the full series
+static DWORD UVDDeviceID[] = {0x9400, // R600
+                              0x9440, // R700 / RV770
+                              0x9450, // RV770
+                              0x9460, // RV770 / RV790
+                              0x94C0, // RV610
+                              0x9500, // RV670
+                              0x9510, // RV670 / R680
+                              0x9580, // RV630
+                              0x9590, // RV635
+                              0x95C0, // RV620
+                              0x9610, // RS780
+                              0x9710, // RS880
                               0x0000};
 
 static int IsAMDUVD(DWORD dwDeviceId)
 {
     for (int i = 0; UVDDeviceID[i] != 0; i++)
     {
-        if (UVDDeviceID[i] == dwDeviceId)
+        if (UVDDeviceID[i] == (dwDeviceId & 0xFFF0))
             return 1;
     }
     return 0;
