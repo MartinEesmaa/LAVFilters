@@ -190,11 +190,6 @@ int CLAVFDemuxer::avio_interrupt_cb(void *opaque)
     if (demux->m_timeOpening && now > (demux->m_timeOpening + AVFORMAT_OPEN_TIMEOUT))
         return 1;
 
-    if (demux->m_timePacketRead && now > (demux->m_timePacketRead + AVFORMAT_OPEN_TIMEOUT)) {
-        DbgLog((LOG_ERROR, 0, TEXT("Timeout while reading packet")));
-        return 1;
-    }
-
     if (demux->m_Abort && now > demux->m_timeAbort)
         return 1;
 
@@ -318,8 +313,6 @@ trynoformat:
 
     LPWSTR extension = pszFileName ? PathFindExtensionW(pszFileName) : nullptr;
 
-    bool imageformat = false;
-
     const AVInputFormat *inputFormat = nullptr;
     if (format)
     {
@@ -332,7 +325,6 @@ trynoformat:
         {
             if (_wcsicmp(extension, wszImageExtensions[i]) == 0)
             {
-                imageformat = true;
                 if (byteContext)
                 {
                     inputFormat = av_find_input_format("image2pipe");
@@ -880,11 +872,6 @@ STDMETHODIMP CLAVFDemuxer::InitAVFormat(LPCOLESTR pszFileName, BOOL bForce)
 
             if (st->codecpar->codec_id == AV_CODEC_ID_TTF || st->codecpar->codec_id == AV_CODEC_ID_OTF)
             {
-                // skip loading system fonts, this can mess up player gui
-                if (_strnicmp(attachFilename->value, "segoe", 5) == 0) {
-                    continue;
-                }
-
                 if (!m_pFontInstaller)
                 {
                     m_pFontInstaller = new CFontInstaller();
@@ -1540,12 +1527,10 @@ STDMETHODIMP CLAVFDemuxer::GetNextPacket(Packet **ppPacket)
     {
         // ignore..
     }
-    m_timePacketRead = 0;
 
     if (result == AVERROR(EINTR) || result == AVERROR(EAGAIN))
     {
         // timeout, probably no real error, return empty packet
-        DbgLog((LOG_TRACE, 10, L"::GetNextPacket(): Timeout"));
         bReturnEmpty = true;
     }
     else if (result == AVERROR_EOF)
@@ -1554,7 +1539,6 @@ STDMETHODIMP CLAVFDemuxer::GetNextPacket(Packet **ppPacket)
     }
     else if (result < 0)
     {
-        DbgLog((LOG_TRACE, 10, L"::GetNextPacket(): Fail, result = %d"), result);
         // meh, fail
     }
     else if (pkt.size <= 0 || pkt.stream_index < 0 || (unsigned)pkt.stream_index >= m_avFormat->nb_streams)
@@ -3226,7 +3210,7 @@ const CBaseDemuxer::stream *CLAVFDemuxer::SelectVideoStream()
         }
         else if (!m_bRM || check_nb_f > 0)
         {
-            if (checkPixels > uint64_t(bestPixels * 1.02))
+            if (checkPixels > bestPixels)
             {
                 best = check;
             }
